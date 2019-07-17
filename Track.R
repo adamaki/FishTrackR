@@ -27,6 +27,7 @@ fhi[2, 2] <- -7.5
 image_fhi <- filter2(image, fhi)
 display(image_fhi)
 
+
 #otsu filter
 display(image < otsu(image))
 
