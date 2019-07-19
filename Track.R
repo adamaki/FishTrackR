@@ -4,10 +4,10 @@
 
 
 library(EBImage)
-library(imager) 
+#library(imager) 
 
 #workingdir <- 'G:/Projects/Cleaner fish learning/Data/Test1'
-workingdir <- ifelse(Sys.info()['user'] == 'Laptop', 'G:/Projects/Cleaner fish learning/Data/Test1', '/Users/adambrooker/R Projects/FishTrackR/ShortTest') # change to location of data
+workingdir <- ifelse(Sys.info()['user'] == 'Laptop', 'G:/Projects/Cleaner fish learning/Data/Test2/subset', '/Users/adambrooker/R Projects/FishTrackR/ShortTest') # change to location of data
 
 setwd(workingdir)
 
@@ -20,8 +20,8 @@ files <- list.files(path = workingdir, pattern = inputfile, all.files = FALSE, r
 for(i in 1:length(files)){
   image <- readImage(files[i]) # load image file
   image <- channel(image, 'green') # Use green channel for max contrast against green tank
-  image <- image*(1/max(image)) # increase contrast to max
   image <- (rotate(image, 22)[626:1730, 491:1600]) #change values to rotate and crop image
+  image <- image*(1/max(image)) # increase contrast to max  
   image <- gblur(image, sigma = 3) # Gaussian smoothing filter
   writeImage(image, gsub('.jpg', '_green.jpg', files[i]))
 }
@@ -29,9 +29,9 @@ for(i in 1:length(files)){
 # select blue channel
 for(i in 1:length(files)){
   image <- readImage(files[i]) # load image file
-  image <- channel(image, 'blue') # Use green channel for max contrast against green tank
-  image <- image*(1/max(image)) # increase contrast to max
+  image <- channel(image, 'blue') # Use blue channel for max contrast against green tank
   image <- (rotate(image, 22)[626:1730, 491:1600]) #change values to rotate and crop image
+  image <- image*(1/max(image)) # increase contrast to max
   image <- gblur(image, sigma = 3) # Gaussian smoothing filter
   writeImage(image, gsub('.jpg', '_blue.jpg', files[i]))
 }
@@ -39,27 +39,35 @@ for(i in 1:length(files)){
 # Load modified files as image stack
 modfiles <- list.files(path = workingdir, pattern = '_blue', all.files = FALSE, recursive = FALSE)
 image_stack <- readImage(modfiles, all = T)
-
 stack_mean <- as.Image(rowMeans(image_stack, dims = 2)) # create mean image of stack
 
-# subject background to leave fish
+# subtract background to leave fish
 thresh_stack <- stack_mean
 
 for(j in 1:length(modfiles)){
-subimg <- stack_mean - image_stack[,,j]
+subimg <- image_stack[,,j] - stack_mean
 subimg <- subimg*(1/max(subimg))
-subimg <- subimg > 0.6
+subimg <- subimg > 0.75
 thresh_stack <- combine(thresh_stack, subimg)
 }
 
 thresh_stack <- thresh_stack[,,-c(1)] # remove first image, which is stack_mean
 
 # segment images in z stack
-for(k in 1:length(modfiles)){
-  thresh_stack[,,k] <- bwlabel(thresh_stack[,,k])
-}
+thresh_stack <- bwlabel(thresh_stack)
 
-display(colorLabels(thresh_stack), method = 'raster', all = T)
+display(thresh_stack, method = 'raster', all = T)
+
+# Remove small objects (noise) from images
+for(k in 1:length(modfiles)){
+  sf <- computeFeatures.shape(thresh_stack[,,k], image_stack[,,k]) ## need these for intensity and size  
+  thresh_stack[,,k] <- rmObjects(thresh_stack[,,k], which(sf[,'s.area'] < 50 | sf[,'s.area'] > 5000))
+}
+                    
+
+
+
+
 
 # adaptive thresholding techniques for detecting objects
 
