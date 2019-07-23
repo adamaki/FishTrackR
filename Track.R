@@ -5,6 +5,7 @@
 
 library(EBImage)
 #library(imager) 
+library(dplyr)
 
 #workingdir <- 'G:/Projects/Cleaner fish learning/Data/Test1'
 workingdir <- ifelse(Sys.info()['user'] == 'Laptop', 'G:/Projects/Cleaner fish learning/Data/Test2/subset', '/Users/adambrooker/R Projects/FishTrackR/ShortTest') # change to location of data
@@ -42,13 +43,13 @@ image_stack <- readImage(modfiles, all = T)
 stack_mean <- as.Image(rowMeans(image_stack, dims = 2)) # create mean image of stack
 
 # subtract background to leave fish
-thresh_stack <- stack_mean
+thresh_stack <- stack_mean # seed thresholded image stack
 
 for(j in 1:length(modfiles)){
 subimg <- image_stack[,,j] - stack_mean
 subimg <- subimg*(1/max(subimg))
-subimg <- subimg > 0.75
-thresh_stack <- combine(thresh_stack, subimg)
+subimg <- bwlabel(subimg > 0.75)
+thresh_stack <- EBImage::combine(thresh_stack, subimg)
 }
 
 thresh_stack <- thresh_stack[,,-c(1)] # remove first image, which is stack_mean
@@ -56,14 +57,57 @@ thresh_stack <- thresh_stack[,,-c(1)] # remove first image, which is stack_mean
 # segment images in z stack
 thresh_stack <- bwlabel(thresh_stack)
 
-display(thresh_stack, method = 'raster', all = T)
-
 # Remove small objects (noise) from images
 for(k in 1:length(modfiles)){
-  sf <- computeFeatures.shape(thresh_stack[,,k], image_stack[,,k]) ## need these for intensity and size  
-  thresh_stack[,,k] <- rmObjects(thresh_stack[,,k], which(sf[,'s.area'] < 50 | sf[,'s.area'] > 5000))
+  sf <- computeFeatures.shape(thresh_stack[,,k], image_stack[,,k]) # calculate shape features
+  thresh_stack[,,k] <- rmObjects(thresh_stack[,,k], which(sf[,'s.area'] < 40 | sf[,'s.area'] > 5000))
 }
-                    
+
+# create coords list file
+coords <- data.frame(frame = numeric(), fishx = numeric(), fishy = numeric(), errors = character())
+
+# find centre of each fish object & write coords to file for each frame
+for(m in 1:length(modfiles)){
+  mf <- computeFeatures.moment(thresh_stack[,,m], image_stack[,,m]) # calculate moment features  
+  coords <- add_row(coords, frame = m, fishx = ifelse(is.matrix(get('mf')), round(mf[1,1]), NA), 
+                    fishy = ifelse(is.matrix(get('mf')), round(mf[1,2]), NA), 
+                    errors = ifelse(is.matrix(get('mf')) == F, 'No fish', ifelse(nrow(mf) > 1, 'Noise', 'None')))
+}
+
+display(thresh_stack, method = 'raster', all = T)   
+
+
+# save segmented images as series
+for(n in 1:length(modfiles)){
+  writeImage(thresh_stack[,,n], gsub('_blue.jpg', '_seg.png', modfiles[n]))
+}
+
+
+# Load segmented files as image stack
+modfiles <- list.files(path = workingdir, pattern = '_seg', all.files = FALSE, recursive = FALSE)
+thresh_stack <- readImage(modfiles, all = T)
+
+
+# segment images in z stack
+thresh_stack <- bwlabel(thresh_stack)
+
+# find centre of each fish object & write coords to file for each frame
+coords <- data.frame(frame = numeric(), fishx = numeric(), fishy = numeric(), errors = character())
+
+for(m in 1:length(modfiles)){
+  mf <- computeFeatures.moment(thresh_stack[,,m], image_stack[,,m]) # calculate moment features  
+  coords <- add_row(coords, frame = m, fishx = ifelse(is.matrix(get('mf')), round(mf[1,1]), NA), 
+                    fishy = ifelse(is.matrix(get('mf')), round(mf[1,2]), NA), 
+                    errors = ifelse(is.matrix(get('mf')) == F, 'No fish', ifelse(nrow(mf) > 1, 'Noise', 'None')))
+}
+
+
+write.csv(coords, paste0(inputfile, '.csv'), row.names = F)
+
+
+
+
+
 
 
 
