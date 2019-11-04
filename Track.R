@@ -7,6 +7,7 @@ library(EBImage)
 #library(imager) 
 library(dplyr)
 
+
 # functions (run once before using script)----------------------------------------------------------------------
 
 # read integer from command line input
@@ -44,7 +45,7 @@ modpiv.l <- c(182, 261) # location of left model pivot axis in cropped and rotat
 modpiv.r <- c(385, 281) # location of right model pivot axis in cropped and rotated image
 
 # calculated variables
-cfactor <- 100/round(sqrt(abs(cal1[[1]]-cal2[[1]])^2+abs(cal1[[2]]-cal2[[2]])^2)) # calculate real distance conversion factor
+cfactor <- caldist/round(sqrt(abs(cal1[[1]]-cal2[[1]])^2+abs(cal1[[2]]-cal2[[2]])^2)) # calculate real distance conversion factor
 
 # 2. load image set, modify images for analysis and create mean of image stack---------------------------------
 files <- list.files(path = workingdir, pattern = inputfile, all.files = FALSE, recursive = FALSE)
@@ -120,7 +121,7 @@ for(k in 1:dim(thresh_stack)[[3]]){
     mf$tmask <- ifelse(tmask[matrix(data = c(round(mf[,'m.cx']), round(mf[,'m.cy'])), nrow(mf))] == 1, 1, 0) # test whether object centre coords are in mask
     }
   thresh_stack[,,k] <- rmObjects(thresh_stack[,,k], which(sf[,'s.area'] < 40 | sf[,'s.area'] > 2000)) # remove small and large objects
-  thresh_stack[,,k] <- rmObjects(thresh_stack[,,k], which(mf[,'mask'] == 0)) # remove objects outside mask
+  thresh_stack[,,k] <- rmObjects(thresh_stack[,,k], which(mf[,'tmask'] == 0)) # remove objects outside mask
 }
 
 # fill holes in fish and dilate to join gaps
@@ -244,6 +245,7 @@ mmask <- channel(mmask, 'red')
 #test_stack <- test
 #mf.all <- data.frame()
 #sf.all <- data.frame()
+modangles <- data.frame(ang.l = numeric(), ang.r = numeric())
 
 for(s in 1:dim(model_stack)[[3]]){
   
@@ -273,7 +275,7 @@ for(s in 1:dim(model_stack)[[3]]){
   mf <- computeFeatures.moment(test, rgb_stack[,,1])
   #test <- rmObjects(test, which( max(abs(mf[,'m.cx']-modpiv.l[[1]])+abs(mf[,'m.cy']-modpiv.l[[2]])) & mf[,'m.cx']<dim(test)[[1]]/2 | max(abs(mf[,'m.cx']-modpiv.r[[1]])+abs(mf[,'m.cy']-modpiv.r[[2]])) & mf[,'m.cx']>dim(test)[[1]]/2 ))
   while(nrow(mf)>2){
-    test <- rmObjects(test, which.max( abs(mf[,'m.cx']-modpiv.l[[1]])+abs(mf[,'m.cy']-modpiv.l[[2]]) + abs(mf[,'m.cx']-modpiv.r[[1]])+abs(mf[,'m.cy']-modpiv.r[[2]]) ))
+    test <- rmObjects(test, which.max( abs(mf[,'m.cx']-modpiv.l[[1]])+abs(mf[,'m.cy']-modpiv.l[[2]]) + abs(mf[,'m.cx']-modpiv.r[[1]])+abs(mf[,'m.cy']-modpiv.r[[2]]) )) # remove extra objects furthest away from model pivots defined in setup
     mf <- computeFeatures.moment(test, rgb_stack[,,1])
   }
   
@@ -284,27 +286,50 @@ for(s in 1:dim(model_stack)[[3]]){
   modang.l <- mf[which.min(mf[,'m.cx']), 'm.theta'] # select left model angle by min x coord
   modang.r <- mf[which.max(mf[,'m.cx']), 'm.theta'] # select right model angle by max x coord
   
-  mod.l <- rotate(modout, modang.l*180/pi) # rotate left model by detected angle
-  mod.r <- rotate(modout, 180+(modang.r*180/pi)) # rotate right model by detected angle
+  modangles <- add_row(modangles, ang.l = modang.l*180/pi, ang.r = 180+(modang.r*180/pi)) # add model angles to list of angles 
+  
+   
+}
+
+  # convert radians angles to degrees
+  modangles$ang.l <- modangles$ang.l*180/pi
+  modangles$ang.r <- 180+(modangles$ang.r*180/pi)
+  
+  # polynomial curve fitting to smooth turn angles of models
+  fit <- lm(modangles$ang.l ~ poly(as.numeric(rownames(modangles)), 10, raw = T))
+  modangles$pred.l <- predict(fit, data.frame(x = seq(1, nrow(modangles), 1)))
+  fit <- lm(modangles$ang.r ~ poly(as.numeric(rownames(modangles)), 10, raw = T))
+  modangles$pred.r <- predict(fit, data.frame(x = seq(1, nrow(modangles), 1)))
+  
+  
+for(t in 1:dim(model_stack)[[3]]){
+  
+  mod.l <- rotate(modout, modangles[t, 'pred.l']) # rotate left model by detected angle
+  mod.r <- rotate(modout, modangles[t, 'pred.r']) # rotate right model by detected angle
   
   mod.l <- translate(mod.l, c(modpiv.l[[1]] - (dim(mod.l)[[1]]/2), modpiv.l[[2]] - (dim(mod.l)[[2]]/2)))[0:dim(red_stack)[[1]], 0:dim(red_stack)[[2]]] # translate left model to correct position and crop
   mod.r <- translate(mod.r, c(modpiv.r[[1]] - (dim(mod.r)[[1]]/2), modpiv.r[[2]] - (dim(mod.r)[[2]]/2)))[0:dim(red_stack)[[1]], 0:dim(red_stack)[[2]]] # translate left model to correct position and crop
-  
+
   #test_stack <- EBImage::combine(test_stack, test)
   #mf.all <- rbind(mf.all, mf)
   #sf.all <- rbind(sf.all, sf)
+
   
-  model_stack[,,s] <- bwlabel(mod.l + mod.r) # combine left and right model outlines
+  model_stack[,,t] <- bwlabel(mod.l + mod.r) # combine left and right model outlines
   
-  
+  overlay <- paintObjects(thresh_stack[,,t], mod_stack[,,,t], col = c('#ff00ff', '#ff00ff'), opac = c(1, 0), thick = T) # paint fish outline in purple
+  overlay <- paintObjects(model_stack[,,t], overlay, col = c('light blue', 'light blue'), opac = c(1, 0), thick = T) # paint model outline in light blue
+  overlay <- drawCircle(overlay, centre[[1]], centre[[2]], radius = inrad, col = 'yellow', fill = F)
+  overlay <- drawCircle(overlay, centre[[1]], centre[[2]], radius = outrad, col = 'yellow', fill = F)
+  writeImage(overlay, gsub('.jpg', '_tracked.png', files[[t]]))
 }
 
 #test_stack <- test_stack[,,-c(1)] 
 
 
-
 # 10. Recalculate coordinates after all errors fixed and models tracked-------------------------------
 thresh_stack <- bwlabel(thresh_stack)
+model_stack <- bwlabel(model_stack)
 display(thresh_stack, method = 'raster', all = T)
 
 # create coords list file
@@ -341,11 +366,11 @@ coords <- add_row(coords, frame = m, fishpx = ifelse(is.matrix(get('mf')), round
 
 
 # convert pixel coordinates to mm coordinates
-coords$fishrx <- round(coords$fishpx * cfactor, 2)
-coords$fishry <- round(coords$fishpy * cfactor, 2)
+coords$fish.rx <- round(coords$fishpx * cfactor, 2)
+coords$fish.ry <- round(coords$fishpy * cfactor, 2)
 coords$distmod.rl <- round(coords$distmod.pl * cfactor, 2)
 coords$distmod.rr <- round(coords$distmod.pr * cfactor, 2)
-coords <- coords[,c(1, 2, 3, 5, 6, 7, 8, 4)]
+coords <- coords[,c(1, 2, 3, 4, 5, 7, 8, 9, 10, 6)]
 
 
 write.csv(coords, paste0(inputfile, '.csv'), row.names = F)
