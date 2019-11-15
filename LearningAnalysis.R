@@ -4,14 +4,25 @@
 
 library(ggplot2)
 library(colorRamps)
+library(zoo)
 
-workingdir <- 'G:/Projects/Cleaner fish learning/Data/test3/Tracked' # change to location of data
+workingdir <- 'G:/Data/Cleaner Fish Learning/Week 1 Experimental Training/Day 1 - Trial 1/16_extracted/Tracked' # change to location of data
 setwd(workingdir)
 
-file <- 'test_w3_n1_exp_t1.csv'
+file <- 'GOPRO016.csv'
 
 clist <- read.csv(file)
+clist$errors <- NULL
 
+# Calculations-----------------------------------------
+
+clist$velocity <- c(NA, sqrt(abs(diff(clist$fish.rx))^2 + abs(diff(clist$fish.ry))^2))
+clist$move <- c(NA, ifelse(rollapply(clist$velocity, width = 3, FUN = mean, na.rm = T, align = 'center') > 0.9, T, F), NA)
+
+summary(clist$move)
+
+
+# Plots-----------------------------------------------
 
 pen.col <- 'black'
 pen.size <- 1.4
@@ -24,11 +35,29 @@ ggplot(clist, aes(fish.rx, fish.ry)) +
   #annotate('segment', x = locations.lookup['7CSW', 'xmin'], xend = locations.lookup['7CSE', 'xmax'], y = locations.lookup['7CSW', 'ymin'], yend = locations.lookup['7CSE', 'ymin'], colour = pen.col, size = pen.size) + # pen boundary
   #annotate('curve', x = locations.lookup['7WHNW', 'xmin']+1, xend = locations.lookup['7WHNW', 'xmax']-1, y = locations.lookup['7WHNW', 'ymin']+1, yend = locations.lookup['7WHNW', 'ymax']-1, colour = pen.col, size = pen.size, curvature = 1) + # hide boundary
   theme(panel.background = element_rect(fill = 'white', colour = 'black')) +
-  scale_x_continuous('x (pixels)', limits = c(0, 120)) + scale_y_continuous('y (pixels)', limits = c(0,120))
+  scale_x_continuous('x (pixels)', limits = c(0, 100)) + 
+  scale_y_reverse('y (pixels)', limits = c(100, 0))
 
 
 ggplot(clist, aes(fish.rx, fish.ry)) +
   geom_path() + 
-  scale_x_continuous(limits = c(0, 120)) +
-  scale_y_continuous(limits = c(0, 120)) +
+  scale_x_continuous(limits = c(0, 100)) +
+  scale_y_reverse(limits = c(100, 0)) +
   theme(panel.background = element_rect(fill = 'white', colour = 'black'))
+
+ggplot(clist) +
+  geom_line(aes(frame, distmod.rl)) +
+  geom_line(aes(frame, distmod.rr), col = 'red') +
+  scale_y_continuous(limits = c(0, 70), name = 'Distance from models (mm)', expand = c(0, 0)) +
+  scale_x_continuous(expand = c(0, 0), name = 'Time (s)') +
+  theme_minimal()
+
+
+
+
+
+
+
+
+
+
