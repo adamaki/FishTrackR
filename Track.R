@@ -26,30 +26,30 @@ readinteger <- function(message = 'Not a number')
 
 
 # 1. Set working directory and input variables----------------------------
-workingdir <- 'G:/Data/Cleaner Fish Learning/Week 1 Experimental Training/Day 1 - Trial 1/16_extracted' # change to location of data
+workingdir <- '/Users/adambrooker/R Projects/FishTrackR/Data/Control/Week 1/Training/Trial 1/Test 1' # change to location of data
 setwd(workingdir)
 
 modout <- bwlabel(channel(readImage(file.choose()), 'gray')) # choose modeloutling.png image
 
-inputfile <- 'GOPRO016'
+inputfile <- 'GOPR0001'
 files <- list.files(path = workingdir, pattern = inputfile, all.files = FALSE, recursive = FALSE)
-start <- 401 # start frame number
-end <- 605 # end frame number
-rotangle <- 18 # image rotation angle to translate image to cartesian grid
-xrange <- c(159,522) # x-axis crop dimensions
-yrange <- c(104, 478) # y-axis crop dimensions
+start <- 4 # start frame number
+end <- 103 # end frame number
+rotangle <- 21 # image rotation angle to translate image to cartesian grid
+xrange <- c(201,497) # x-axis crop dimensions
+yrange <- c(151, 457) # y-axis crop dimensions
 
-centre <- c(180, 176) # coords for centre of tank in cropped and rotated image
-inrad <- 29 # radius of drain mask in pixels
-outrad <- 170 # radius of tank mask in pixels
-cal1 <- c(13, 187) # location of 1st calibration marker in any image
-cal2 <- c(355, 170) # location of 2nd calibration marker in any image
+centre <- c(152, 139) # coords for centre of tank in cropped and rotated image
+inrad <- 27 # radius of drain mask in pixels
+outrad <- 163 # radius of tank mask in pixels
+cal1 <- c(6, 150) # location of 1st calibration marker in any image
+cal2 <- c(293, 147) # location of 2nd calibration marker in any image
 caldist <- 100 # real distance between calibration markers in cm
-modpiv.l <- c(113, 184) # location of left model pivot axis in cropped and rotated image
-modpiv.r <- c(253, 189) # location of right model pivot axis in cropped and rotated image
+modpiv.l <- c(83, 147) # location of left model pivot axis in cropped and rotated image
+modpiv.r <- c(220, 142) # location of right model pivot axis in cropped and rotated image
 curve.fitting <- T # Turn curve fitting for model rotation on or off
-dir.l <- F # direction of left model (switch to F if wrong direction in output)
-dir.r <- T # direction of right model (switch to F if wrong direction in output)
+#dir.l <- F # direction of left model (switch to F if wrong direction in output)
+#dir.r <- T # direction of right model (switch to F if wrong direction in output)
 
 # image testing to refine rotating and cropping
 test.img <- readImage(files[[start]])
@@ -86,34 +86,45 @@ for(i in (start+1):end){
   #mod_stack <- EBImage::combine(mod_stack, channel(image, 'blue'))
 }
 
-# create blue stack for tracking fish
-#blue_stack <- channel(mod_stack, 'blue')
-blue_stack <- channel(mod_stack, 'gray')
-blue_stack <- blue_stack*(1/max(blue_stack)) # increase contrast to max
-blue_stack <- gblur(blue_stack, sigma = 3) # Gaussian smoothing filter
-blue_stack_mean <- as.Image(rowMeans(blue_stack, dims = 2)) # create mean image of stack
+# create grey stack for tracking fish
+gray_stack <- channel(mod_stack, 'gray')
+#gray_stack <- channel(mod_stack, 'gray')
+gray_stack <- gray_stack*(1/max(gray_stack)) # increase contrast to max
+gray_stack <- gblur(gray_stack, sigma = 3) # Gaussian smoothing filter
+gray_stack_mean <- as.Image(rowMeans(gray_stack, dims = 2)) # create mean image of stack
 
 # create rgb stack for tracking model
+
+# extract blue channel and modify
+blue_stack <- channel(mod_stack, 'blue')
+#blue_stack <- 1-blue_stack # negative
+blue_stack <- blue_stack*(1/max(blue_stack)) # increase contrast to max
+blue_stack <- gblur(blue_stack, sigma = 3) # Gaussian smoothing filter
 
 # extract red channel and modify
 red_stack <- channel(mod_stack, 'red')
 red_stack <- 1-red_stack # negative
 red_stack <- red_stack*(1/max(red_stack)) # increase contrast to max
-red_stack <- gblur(red_stack, sigma = 1) # Gaussian smoothing filter
+red_stack <- gblur(red_stack, sigma = 3) # Gaussian smoothing filter
 
 green_stack <- channel(mod_stack, 'green')
 green_stack <- 1-green_stack
 green_stack <- green_stack*(1/max(green_stack)) # increase contrast to max
-green_stack <- gblur(green_stack, sigma = 1) # Gaussian smoothing filter
+green_stack <- gblur(green_stack, sigma = 3) # Gaussian smoothing filter
 
 rgb_stack <- red_stack*green_stack*blue_stack
 #display(rgb_stack*(1/max(rgb_stack)))
 
 Sys.sleep(2)
+}) # end of system time measurement
+
 
 # 3. model tracking code----------------------------------------------------------------------------------
 
+system.time({
+
 model_stack <- rgb_stack
+#model_stack <- red_stack
 
 # adaptive threshold filter
 disc <- makeBrush(31, 'disc')
@@ -121,8 +132,10 @@ disc <- disc / sum(disc)
 offset <- 0.001
 
 # model size thresholds based on image size
-mod.min <- round((dim(model_stack)[[1]] * dim(model_stack)[[2]]) * 0.00325) # constant is area of image that is model, i.e. 0.325%
-mod.max <- round((dim(model_stack)[[1]] * dim(model_stack)[[2]]) * 0.0065)
+#mod.min <- round((dim(model_stack)[[1]] * dim(model_stack)[[2]]) * 0.00325) # constant is area of image that is model, i.e. 0.325%
+mod.min <- round((dim(model_stack)[[1]] * dim(model_stack)[[2]]) * 0.004) # constant is area of image that is model, i.e. 0.325%
+#mod.max <- round((dim(model_stack)[[1]] * dim(model_stack)[[2]]) * 0.0065)
+mod.max <- round((dim(model_stack)[[1]] * dim(model_stack)[[2]]) * 0.015)
 
 # create mask of model radii
 mmask <- floodFill(mod_stack[,,,1], c(1, 1, 1, 1), col = 'black', tolerance = 255)
@@ -146,8 +159,8 @@ for(s in 1:dim(model_stack)[[3]]){
   test <- test * mmask
   
   test <- bwlabel(test)
-  sf <- computeFeatures.shape(test, rgb_stack[,,1])
-  test <- rmObjects(test, which(sf[,'s.area'] < mod.min | sf[,'s.area'] > mod.max)) # keep model-sized objects
+  #sf <- computeFeatures.shape(test, rgb_stack[,,1])
+  #test <- rmObjects(test, which(sf[,'s.area'] < mod.min | sf[,'s.area'] > mod.max)) # keep model-sized objects
   
   test <- watershed(distmap(test), 5) # splits joined objects using watershed function
   #display(colorLabels(test, normalize = T))
@@ -156,7 +169,7 @@ for(s in 1:dim(model_stack)[[3]]){
   test <- rmObjects(test, which(sf[,'s.area'] < mod.min | sf[,'s.area'] > mod.max))  # keep model-sized objects
   
   mf <- computeFeatures.moment(test, rgb_stack[,,1])
-  test <- rmObjects(test, which(mf[,'m.eccentricity'] < 0.96))  # remove objects that are not nearly a straight line
+  test <- rmObjects(test, which(mf[,'m.eccentricity'] < 0.90))  # remove objects that are not nearly a straight line
   
   mf <- computeFeatures.moment(test, rgb_stack[,,1])
   #test <- rmObjects(test, which( max(abs(mf[,'m.cx']-modpiv.l[[1]])+abs(mf[,'m.cy']-modpiv.l[[2]])) & mf[,'m.cx']<dim(test)[[1]]/2 | max(abs(mf[,'m.cx']-modpiv.r[[1]])+abs(mf[,'m.cy']-modpiv.r[[2]])) & mf[,'m.cx']>dim(test)[[1]]/2 ))
@@ -172,21 +185,23 @@ for(s in 1:dim(model_stack)[[3]]){
   modang.l <- mf[which.min(mf[,'m.cx']), 'm.theta'] # select left model angle by min x coord
   modang.r <- mf[which.max(mf[,'m.cx']), 'm.theta'] # select right model angle by max x coord
   
+  modangles <- add_row(modangles, ang.l = modang.l*180/pi, ang.r = modang.r*180/pi) # add model angles to list of angles 
+  
   # nested if/else to get model direction right
-  if(dir.l == T){
-    if(dir.r == T){
-      modangles <- add_row(modangles, ang.l = modang.l*180/pi, ang.r = modang.r*180/pi) # add model angles to list of angles  
-    } else {
-      modangles <- add_row(modangles, ang.l = modang.l*180/pi, ang.r = 180+(modang.r*180/pi)) # add model angles to list of angles  
-    }
+  #if(dir.l == T){
+   # if(dir.r == T){
+    #  modangles <- add_row(modangles, ang.l = modang.l*180/pi, ang.r = modang.r*180/pi) # add model angles to list of angles  
+    #} else {
+    #  modangles <- add_row(modangles, ang.l = modang.l*180/pi, ang.r = 180+(modang.r*180/pi)) # add model angles to list of angles  
+    #}
     
-  } else {
-    if(dir.r == T){
-      modangles <- add_row(modangles, ang.l = 180+(modang.l*180/pi), ang.r = modang.r*180/pi) # add model angles to list of angles  
-    } else {
-      modangles <- add_row(modangles, ang.l = 180+(modang.l*180/pi), ang.r = 180+(modang.r*180/pi)) # add model angles to list of angles  
-    }
-  }
+  #} else {
+  #  if(dir.r == T){
+  #    modangles <- add_row(modangles, ang.l = 180+(modang.l*180/pi), ang.r = modang.r*180/pi) # add model angles to list of angles  
+  #  } else {
+  #    modangles <- add_row(modangles, ang.l = 180+(modang.l*180/pi), ang.r = 180+(modang.r*180/pi)) # add model angles to list of angles  
+  #  }
+  #}
   
   
 } # end of model thresholding loop
@@ -225,10 +240,13 @@ for(t in 1:dim(model_stack)[[3]]){
 
 #test_stack <- test_stack[,,-c(1)] 
 Sys.sleep(2)
+}) # end of system time measurement
 
 # 4. Subtract mean image from stack, threshold image stack, mask outside tank and remove noise-----------------------------------------
 
-thresh_stack <- blue_stack_mean # seed thresholded image stack
+system.time({
+  
+thresh_stack <- gray_stack_mean # seed thresholded image stack
 
 # create mask of tank area
 tmask <- floodFill(mod_stack[,,,1], c(1, 1, 1, 1), col = 'black', tolerance = 255)
@@ -237,21 +255,22 @@ tmask <- drawCircle(tmask, centre[[1]], centre[[2]], radius = inrad, fill = T, c
 tmask <- channel(tmask, 'red')
 tmask <- bwlabel(tmask)
 
-for(j in 1:dim(blue_stack)[[3]]){
+for(j in 1:dim(gray_stack)[[3]]){
 #subimg <- blue_stack[,,j] - blue_stack_mean
-subimg <- blue_stack_mean - blue_stack[,,j]
+subimg <- gray_stack_mean - gray_stack[,,j]
 subimg <- subimg*(1/max(subimg))
 fmask <- dilate(model_stack[,,j], makeBrush(5, shape = 'disc')) # make mask for models
 subimg <- 1-(1-subimg + fmask) # mask out models
+subimg <- 1-(1-subimg + 1-tmask) # mask outside tank
 subimg <- subimg > 0.75
 subimg <- bwlabel(subimg)
-sf <- computeFeatures.shape(subimg, blue_stack[,,k]) # calculate shape features
-mf <- computeFeatures.moment(subimg, blue_stack[,,k]) # calculate moment features 
-if(is.matrix(get('mf'))) {
-  mf <- as.data.frame(mf)
-  mf$tmask <- ifelse(tmask[matrix(data = c(round(mf[,'m.cx']), round(mf[,'m.cy'])), nrow(mf))] == 1, 1, 0) # test whether object centre coords are in mask
-  subimg <- rmObjects(subimg, which(mf[,'tmask'] == 0)) # remove objects outside mask
-}
+sf <- computeFeatures.shape(subimg, gray_stack[,,j]) # calculate shape features
+mf <- computeFeatures.moment(subimg, gray_stack[,,j]) # calculate moment features 
+#if(is.matrix(get('mf'))) {
+#  mf <- as.data.frame(mf)
+#  mf$tmask <- ifelse(tmask[matrix(data = c(round(mf[,'m.cx']), round(mf[,'m.cy'])), nrow(mf))] == 1, 1, 0) # test whether object centre coords are in mask
+#  subimg <- rmObjects(subimg, which(mf[,'tmask'] == 0)) # remove objects outside mask
+#}
 subimg <- rmObjects(subimg, which(sf[,'s.area'] < round((dim(thresh_stack)[[1]] * dim(thresh_stack)[[2]]) * 0.00005) | sf[,'s.area'] > round((dim(thresh_stack)[[1]] * dim(thresh_stack)[[2]]) * 0.005))) # remove objects less than 0.005% of image area and greater than 1% of image area 
 thresh_stack <- EBImage::combine(thresh_stack, subimg)
 }
@@ -266,12 +285,15 @@ thresh_stack <- fillHull(thresh_stack)
 thresh_stack <- dilate(thresh_stack, makeBrush(11, shape = 'disc'))
 thresh_stack <- bwlabel(thresh_stack)
 
-display(thresh_stack, method = 'raster', all = T)  
+#display(thresh_stack, method = 'raster', all = T)  
 
 Sys.sleep(2)
+}) # end of system time measurement
 
 # 6. Create list of fish coordinates and mark errors-----------------------------------------
 
+system.time({
+  
 # create coords list file
 coords <- data.frame(frame = numeric(), fishpx = numeric(), fishpy = numeric(), errors = character())
 
@@ -287,11 +309,16 @@ coords$fishrx <- round(coords$fishpx * cfactor, 2)
 coords$fishry <- round(coords$fishpy * cfactor, 2)
 coords <- coords[,c(1, 2, 3, 5, 6, 4)]
 
+rownames(coords) <- coords$frame # rename rows to frame number
+
 display(thresh_stack, method = 'raster', all = T)   
 
 Sys.sleep(2)
+}) # end of system time measurement
 
 # 7. save segmented images as series---------------------------------------------------
+system.time({
+  
 dir.create('Tracked')
 setwd(paste0(workingdir, '/Tracked'))
 
@@ -384,6 +411,41 @@ while(frame > 0){
 
 }
 
+# 10. Forcing fish coordinates if fish remains in the same place for many frames---------------------------------------------------
+fixpos <- function(stf, enf){
+  
+  startframe <- stf-start+1
+  endframe <- enf-start+1
+  
+  readinteger('Enter x coordinate of fish: ')
+  fish <- num
+  readinteger('Enter y coordinate of fish: ')
+  fish <- c(fish, num)
+  
+  for(frame in startframe:endframe){
+    thresh_stack <- bwlabel(thresh_stack)
+    mf <- computeFeatures.moment(thresh_stack[,,frame], blue_stack[,,frame]) # calculate moment features  
+    if(is.matrix(get('mf'))) {thresh_stack[,,frame] <- rmObjects(thresh_stack[,,frame], seq(1, nrow(mf), 1))}
+
+    thresh_stack[fish[[1]], fish[[2]], frame] <- 1
+    thresh_stack[,,frame] <- dilate(thresh_stack[,,frame], makeBrush(15, shape = 'disc'))
+    coords[frame,2] <- fish[[1]]
+    coords[frame,3] <- fish[[2]]
+    coords[frame,6] <- 'None'
+    
+    setwd(paste0(workingdir, '/Tracked'))
+    overlay <- paintObjects(thresh_stack[,,frame], mod_stack[,,,frame], col = c('#ff00ff', '#ff00ff'), opac = c(1, 0), thick = T)
+    overlay <- paintObjects(model_stack[,,frame], overlay, col = c('light blue', 'light blue'), opac = c(1, 0), thick = T) # paint model outline in light blue
+    overlay <- drawCircle(overlay, centre[[1]], centre[[2]], radius = inrad, col = 'yellow', fill = F)
+    overlay <- drawCircle(overlay, centre[[1]], centre[[2]], radius = outrad, col = 'yellow', fill = F)
+    writeImage(overlay, gsub('.jpg', '_tracked.png', files[frame+start-1]))
+  }
+  
+  coords <<- coords
+  thresh_stack <<- thresh_stack
+
+}
+
 # 10. Recalculate coordinates after all errors fixed and models tracked-------------------------------
 system.time({
 thresh_stack <- bwlabel(thresh_stack)
@@ -434,6 +496,8 @@ coords <- coords[,c(1, 2, 3, 4, 5, 7, 8, 9, 10, 6)]
 write.csv(coords, paste0(inputfile, '_', start, '-', end, '.csv'), row.names = F)
 
 }) # end of system time measurement
+
+
 
 
 # Load segmented files as image stack (If need to reload old dataset)-----------------------------------
