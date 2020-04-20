@@ -33,8 +33,8 @@ modout <- bwlabel(channel(readImage(file.choose()), 'gray')) # choose modeloutli
 
 inputfile <- 'GOPR0001'
 files <- list.files(path = workingdir, pattern = inputfile, all.files = FALSE, recursive = FALSE)
-start <- 4 # start frame number
-end <- 103 # end frame number
+start <- 504 # start frame number
+end <- 603 # end frame number
 rotangle <- 21 # image rotation angle to translate image to cartesian grid
 xrange <- c(201,497) # x-axis crop dimensions
 yrange <- c(151, 457) # y-axis crop dimensions
@@ -116,12 +116,12 @@ rgb_stack <- red_stack*green_stack*blue_stack
 #display(rgb_stack*(1/max(rgb_stack)))
 
 Sys.sleep(2)
-}) # end of system time measurement
+#}) # end of system time measurement
 
 
 # 3. model tracking code----------------------------------------------------------------------------------
 
-system.time({
+#system.time({
 
 model_stack <- rgb_stack
 #model_stack <- red_stack
@@ -240,11 +240,11 @@ for(t in 1:dim(model_stack)[[3]]){
 
 #test_stack <- test_stack[,,-c(1)] 
 Sys.sleep(2)
-}) # end of system time measurement
+#}) # end of system time measurement
 
 # 4. Subtract mean image from stack, threshold image stack, mask outside tank and remove noise-----------------------------------------
 
-system.time({
+#system.time({
   
 thresh_stack <- gray_stack_mean # seed thresholded image stack
 
@@ -288,11 +288,11 @@ thresh_stack <- bwlabel(thresh_stack)
 #display(thresh_stack, method = 'raster', all = T)  
 
 Sys.sleep(2)
-}) # end of system time measurement
+#}) # end of system time measurement
 
 # 6. Create list of fish coordinates and mark errors-----------------------------------------
 
-system.time({
+#system.time({
   
 # create coords list file
 coords <- data.frame(frame = numeric(), fishpx = numeric(), fishpy = numeric(), errors = character())
@@ -314,10 +314,10 @@ rownames(coords) <- coords$frame # rename rows to frame number
 display(thresh_stack, method = 'raster', all = T)   
 
 Sys.sleep(2)
-}) # end of system time measurement
+#}) # end of system time measurement
 
 # 7. save segmented images as series---------------------------------------------------
-system.time({
+#system.time({
   
 dir.create('Tracked')
 setwd(paste0(workingdir, '/Tracked'))
@@ -446,7 +446,7 @@ fixpos <- function(stf, enf){
 
 }
 
-# 10. Recalculate coordinates after all errors fixed and models tracked-------------------------------
+# 11. Recalculate coordinates after all errors fixed and models tracked-------------------------------
 system.time({
 thresh_stack <- bwlabel(thresh_stack)
 model_stack <- bwlabel(model_stack)
