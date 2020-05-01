@@ -6,10 +6,10 @@ library(ggplot2)
 library(colorRamps)
 library(zoo)
 
-workingdir <- 'G:/Data/Cleaner Fish Learning/Week 1 Experimental Training/Day 1 - Trial 1/16_extracted/Tracked' # change to location of data
+workingdir <- '/Users/adambrooker/R Projects/FishTrackR/Data/Control/Week 1/Training/Trial 1' # change to location of data
 setwd(workingdir)
 
-file <- 'GOPRO016.csv'
+file <- 'GOPR0001.csv'
 
 clist <- read.csv(file)
 clist$errors <- NULL

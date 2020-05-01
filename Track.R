@@ -26,27 +26,27 @@ readinteger <- function(message = 'Not a number')
 
 
 # 1. Set working directory and input variables----------------------------
-workingdir <- '/Users/adambrooker/R Projects/FishTrackR/Data/Control/Week 1/Training/Trial 1/Test 1' # change to location of data
+workingdir <- '/Users/adambrooker/OneDrive - University of Stirling/Lumpfish learning data/Control/Week 1/Training/Trial 2/Test 1' # change to location of data
 setwd(workingdir)
 
 modout <- bwlabel(channel(readImage(file.choose()), 'gray')) # choose modeloutling.png image
 
 inputfile <- 'GOPR0001'
 files <- list.files(path = workingdir, pattern = inputfile, all.files = FALSE, recursive = FALSE)
-start <- 504 # start frame number
-end <- 603 # end frame number
-rotangle <- 21 # image rotation angle to translate image to cartesian grid
-xrange <- c(201,497) # x-axis crop dimensions
-yrange <- c(151, 457) # y-axis crop dimensions
+start <- 7 # start frame number
+end <- 208 # end frame number
+rotangle <- 25 # image rotation angle to translate image to cartesian grid
+xrange <- c(224,517) # x-axis crop dimensions
+yrange <- c(160, 461) # y-axis crop dimensions
 
-centre <- c(152, 139) # coords for centre of tank in cropped and rotated image
+centre <- c(137, 138) # coords for centre of tank in cropped and rotated image
 inrad <- 27 # radius of drain mask in pixels
 outrad <- 163 # radius of tank mask in pixels
-cal1 <- c(6, 150) # location of 1st calibration marker in any image
-cal2 <- c(293, 147) # location of 2nd calibration marker in any image
+cal1 <- c(3, 155) # location of 1st calibration marker in any image
+cal2 <- c(294, 150) # location of 2nd calibration marker in any image
 caldist <- 100 # real distance between calibration markers in cm
-modpiv.l <- c(83, 147) # location of left model pivot axis in cropped and rotated image
-modpiv.r <- c(220, 142) # location of right model pivot axis in cropped and rotated image
+modpiv.l <- c(67, 152) # location of left model pivot axis in cropped and rotated image
+modpiv.r <- c(215, 146) # location of right model pivot axis in cropped and rotated image
 curve.fitting <- T # Turn curve fitting for model rotation on or off
 #dir.l <- F # direction of left model (switch to F if wrong direction in output)
 #dir.r <- T # direction of right model (switch to F if wrong direction in output)
@@ -162,25 +162,39 @@ for(s in 1:dim(model_stack)[[3]]){
   #sf <- computeFeatures.shape(test, rgb_stack[,,1])
   #test <- rmObjects(test, which(sf[,'s.area'] < mod.min | sf[,'s.area'] > mod.max)) # keep model-sized objects
   
-  test <- watershed(distmap(test), 5) # splits joined objects using watershed function
+  nobj <- 0
+  waterthresh <- 5
+  
+  while(nobj == 0){ # while loop to incrementally reduce watershed threshold value if there are no objects left in the image
+  test2 <- test
+  test2 <- watershed(distmap(test2), waterthresh) # splits joined objects using watershed function
   #display(colorLabels(test, normalize = T))
   
-  sf <- computeFeatures.shape(test, rgb_stack[,,1])
-  test <- rmObjects(test, which(sf[,'s.area'] < mod.min | sf[,'s.area'] > mod.max))  # keep model-sized objects
+  sf <- computeFeatures.shape(test2, rgb_stack[,,1])
+  test2 <- rmObjects(test2, which(sf[,'s.area'] < mod.min | sf[,'s.area'] > mod.max))  # keep model-sized objects
   
-  mf <- computeFeatures.moment(test, rgb_stack[,,1])
-  test <- rmObjects(test, which(mf[,'m.eccentricity'] < 0.90))  # remove objects that are not nearly a straight line
+  mf <- computeFeatures.moment(test2, rgb_stack[,,1])
+  test2 <- rmObjects(test2, which(mf[,'m.eccentricity'] < 0.90))  # remove objects that are not nearly a straight line
   
-  mf <- computeFeatures.moment(test, rgb_stack[,,1])
+  mf <- computeFeatures.moment(test2, rgb_stack[,,1])
   #test <- rmObjects(test, which( max(abs(mf[,'m.cx']-modpiv.l[[1]])+abs(mf[,'m.cy']-modpiv.l[[2]])) & mf[,'m.cx']<dim(test)[[1]]/2 | max(abs(mf[,'m.cx']-modpiv.r[[1]])+abs(mf[,'m.cy']-modpiv.r[[2]])) & mf[,'m.cx']>dim(test)[[1]]/2 ))
   if(is.matrix(get('mf'))) {
   while(nrow(mf)>2){
-    test <- rmObjects(test, which.max( abs(mf[,'m.cx']-modpiv.l[[1]])+abs(mf[,'m.cy']-modpiv.l[[2]]) + abs(mf[,'m.cx']-modpiv.r[[1]])+abs(mf[,'m.cy']-modpiv.r[[2]]) )) # remove extra objects furthest away from model pivots defined in setup
-    mf <- computeFeatures.moment(test, rgb_stack[,,1])
+    test2 <- rmObjects(test2, which.max( abs(mf[,'m.cx']-modpiv.l[[1]])+abs(mf[,'m.cy']-modpiv.l[[2]]) + abs(mf[,'m.cx']-modpiv.r[[1]])+abs(mf[,'m.cy']-modpiv.r[[2]]) )) # remove extra objects furthest away from model pivots defined in setup
+    mf <- computeFeatures.moment(test2, rgb_stack[,,1])
   }
   }
   
-  mf <- computeFeatures.moment(test, rgb_stack[,,1])
+  mf <- computeFeatures.moment(test2, rgb_stack[,,1])
+  
+  if(is.matrix(get('mf')) == T){
+    test <- test2
+    nobj <- nrow(mf) # break out of while loop
+  } else {
+    waterthresh <- waterthresh - 1 # reduce watershed threshold to try again
+  }
+  
+  } # end of while loop to make sure there are objects in image
   
   modang.l <- mf[which.min(mf[,'m.cx']), 'm.theta'] # select left model angle by min x coord
   modang.r <- mf[which.max(mf[,'m.cx']), 'm.theta'] # select right model angle by max x coord
